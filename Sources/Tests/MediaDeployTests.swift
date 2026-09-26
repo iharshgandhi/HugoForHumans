@@ -678,6 +678,106 @@ func editorSuite() -> TestSuite {
         expect(!SiteEngine.isHugoSite(notFolder), "a file is not a site folder")
     }
 
+    s.test("a theme folder of your own is recognised and imported") {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hfh-theme-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        // A folder that is not a theme: picking the wrong level is the common
+        // mistake, so it has to be refused rather than installed.
+        let notATheme = root.appendingPathComponent("MyProject", isDirectory: true)
+        try FileManager.default.createDirectory(at: notATheme.appendingPathComponent("content"),
+                                                withIntermediateDirectories: true)
+        expect(!LocalThemeInstaller.isTheme(notATheme), "a project folder is not a theme")
+
+        // A real theme, named the way a Roman-inspired one would be.
+        let theme = root.appendingPathComponent("Romana Imperia", isDirectory: true)
+        try FileManager.default.createDirectory(at: theme.appendingPathComponent("layouts/_default"),
+                                                withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: theme.appendingPathComponent("assets/css"),
+                                                withIntermediateDirectories: true)
+        try "title".write(to: theme.appendingPathComponent("layouts/index.html"),
+                          atomically: true, encoding: .utf8)
+        try "name = \"Romana Imperia\"\n".write(to: theme.appendingPathComponent("theme.toml"),
+                                                   atomically: true, encoding: .utf8)
+        expect(LocalThemeInstaller.isTheme(theme), "a folder with layouts/ is a theme")
+
+        // The name comes from theme.toml, not the folder, and is made safe.
+        expectEqual(LocalThemeInstaller.name(for: theme), "romana-imperia", "named from theme.toml")
+
+        let installed = try LocalThemeInstaller.install(.directory(theme), into: root)
+        expectEqual(installed.lastPathComponent, "romana-imperia", "lands in themes/ under a safe name")
+        expect(FileManager.default.fileExists(
+            atPath: installed.appendingPathComponent("layouts/index.html").path), "layouts arrive")
+        expect(FileManager.default.fileExists(
+            atPath: installed.appendingPathComponent("assets/css").path), "assets arrive")
+        // Copy, not move: a theme the user is still working in must survive.
+        expect(FileManager.default.fileExists(
+            atPath: theme.appendingPathComponent("layouts/index.html").path), "the source is untouched")
+    }
+
+    s.test("importing a theme twice does not overwrite the first copy") {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hfh-theme2-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let theme = root.appendingPathComponent("romana", isDirectory: true)
+        try FileManager.default.createDirectory(at: theme.appendingPathComponent("layouts"),
+                                                withIntermediateDirectories: true)
+        try "one".write(to: theme.appendingPathComponent("layouts/index.html"),
+                        atomically: true, encoding: .utf8)
+
+        let first = try LocalThemeInstaller.install(.directory(theme), into: root)
+        // Edit the source, so an overwrite would be visible in the output.
+        try "two".write(to: theme.appendingPathComponent("layouts/index.html"),
+                        atomically: true, encoding: .utf8)
+        let second = try LocalThemeInstaller.install(.directory(theme), into: root)
+
+        expectEqual(second.lastPathComponent, "\(first.lastPathComponent)-2", "the second gets its own folder")
+        let kept = try String(contentsOf: first.appendingPathComponent("layouts/index.html"), encoding: .utf8)
+        expectEqual(kept, "one", "and the first copy is untouched")
+    }
+
+    s.test("a folder that is not a theme is refused with an explanation") {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hfh-theme3-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let notATheme = root.appendingPathComponent("my-site", isDirectory: true)
+        try FileManager.default.createDirectory(at: notATheme, withIntermediateDirectories: true)
+
+        var refused = false
+        do {
+            _ = try LocalThemeInstaller.install(.directory(notATheme), into: root)
+        } catch {
+            refused = true
+            let text = error.localizedDescription
+            expect(text.contains("not a Hugo theme"), "the message says what is wrong")
+            expect(text.contains("layouts/"), "and what a theme needs")
+        }
+        expect(refused, "nothing is installed")
+    }
+
+    s.test("a macOS resource-fork folder is not mistaken for a theme") {
+        // Every zip made on macOS carries a __MACOSX mirror that sorts first, so
+        // without this check an importer installs the resource forks instead.
+        let fake = FileManager.default.temporaryDirectory
+            .appendingPathComponent("__MACOSX-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: fake) }
+        try FileManager.default.createDirectory(at: fake.appendingPathComponent("layouts"),
+                                                withIntermediateDirectories: true)
+        let named = fake.deletingLastPathComponent().appendingPathComponent("__MACOSX", isDirectory: true)
+        try? FileManager.default.moveItem(at: fake, to: named)
+        expect(!LocalThemeInstaller.isTheme(named), "__MACOSX is never treated as a theme")
+    }
+
+    s.test("a theme name is always made safe as a folder name") {
+        expectEqual(LocalThemeInstaller.sanitize("My Great Theme"), "my-great-theme", "spaces become dashes")
+        expectEqual(LocalThemeInstaller.sanitize("Theme_v2.1 (final)"), "theme-v2-1-final", "symbols go")
+        expect(!LocalThemeInstaller.sanitize("///").isEmpty, "never empty")
+        expect(!LocalThemeInstaller.sanitize("../../etc").contains("/"), "cannot escape themes/")
+        expectEqual(LocalThemeInstaller.sanitize("UPPER"), "upper", "lowercased, as Hugo expects")
+    }
+
     s.test("a page with an image is a leaf bundle Hugo can serve") {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("hfh-bundle-\(UUID().uuidString)", isDirectory: true)

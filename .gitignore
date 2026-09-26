@@ -13,3 +13,7 @@ dist/
 *.xcworkspace
 .swiftpm/
 Package.resolved
+
+# Presentation deck. Built locally, not part of the source tree, and ~2.5 MB of
+# embedded images — it does not belong in the repository. The file stays on disk.
+Presentation/

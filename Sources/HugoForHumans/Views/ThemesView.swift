@@ -11,6 +11,9 @@ struct ThemesView: View {
     @State private var search = ""
     @State private var category: Theme.Category?
     @State private var message: String?
+    /// Whether `message` reports a problem. The banner is not dressed as good
+    /// news when an import was rejected.
+    @State private var messageIsError = false
     @State private var confirmRemoval: Theme?
 
     private var results: [Theme] {
@@ -39,6 +42,28 @@ struct ThemesView: View {
                     .disabled(engine.config.theme.isEmpty)
                     .help("Write the selected theme into hugo.toml")
                 }
+
+                // A theme the user built themselves, or downloaded from
+                // somewhere the catalogue does not list. It lands in the same
+                // themes/ folder a catalogue theme would, so everything
+                // downstream is unchanged.
+                Menu {
+                    Button {
+                        importThemeFromFolder()
+                    } label: {
+                        Label("Choose a Theme Folder…", systemImage: "folder")
+                    }
+                    Button {
+                        importThemeFromArchive()
+                    } label: {
+                        Label("Choose a Theme Archive…", systemImage: "archivebox")
+                    }
+                } label: {
+                    Label("Import…", systemImage: "square.and.arrow.down")
+                }
+                .controlSize(.small)
+                .disabled(engine.root == nil)
+                .help("Use a Hugo theme from your own disk")
             }
 
             VStack(spacing: 0) {
@@ -56,7 +81,8 @@ struct ThemesView: View {
 
             if let message {
                 HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Image(systemName: messageIsError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(messageIsError ? .orange : .green)
                     Text(message).font(.system(size: 12))
                     Spacer()
                 }
@@ -200,6 +226,59 @@ struct ThemesView: View {
         )
     }
 
+    // MARK: - Importing a local theme
+
+    private func importThemeFromFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose your theme folder — the one containing layouts/"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importTheme(.directory(url))
+    }
+
+    private func importThemeFromArchive() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a theme archive (.zip, .tar, .tar.gz)"
+        // A theme may also arrive as a bare folder, so both are allowed.
+        panel.allowedContentTypes = []
+        panel.allowsOtherFileTypes = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importTheme(url.pathExtension.lowercased().isEmpty ? .directory(url) : .archive(url))
+    }
+
+    private func importTheme(_ source: LocalThemeInstaller.Source) {
+        guard let root = engine.root else { return }
+        installing = "your theme"
+        Task {
+            // Reading and copying a large theme takes a moment, so it runs off
+            // the main actor and reports back when finished.
+            let outcome: Result<URL, Error> = await Task.detached(priority: .userInitiated) {
+                do { return .success(try LocalThemeInstaller.install(source, into: root)) }
+                catch { return .failure(error) }
+            }.value
+            await MainActor.run {
+                installing = nil
+                switch outcome {
+                case .success(let destination):
+                    let name = destination.lastPathComponent
+                    messageIsError = false
+                    message = "\(name) imported from your own disk. Press Use to switch to it."
+                    // The gallery lists catalogue themes, so an imported one is
+                    // not in `results` — refresh so the installed set is right.
+                    engine.reloadAll()
+                case .failure(let error):
+                    messageIsError = true
+                    message = error.localizedDescription
+                }
+            }
+        }
+    }
+
     // MARK: - Actions
 
     private func install(_ theme: Theme) {
@@ -229,8 +308,10 @@ struct ThemesView: View {
                     let gitDir = root.appendingPathComponent("themes/\(theme.name)/.git")
                     try? FileManager.default.removeItem(at: gitDir)
                     engine.reloadAll()
+                    messageIsError = false
                     message = "\(theme.name) installed. Press Use to switch to it."
                 } else {
+                    messageIsError = true
                     message = "Could not install \(theme.name). Check your internet connection."
                 }
                 clearMessageSoon()

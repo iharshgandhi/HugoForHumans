@@ -229,3 +229,28 @@ Two checks worth knowing about:
 
 See [`RELEASE_PLAN.md`](RELEASE_PLAN.md) for the current release state and what
 a Linux port would and would not involve.
+
+## Themes
+
+The gallery lists themes that were each cloned and built against Hugo
+\(v0.166.0 extended) during development. **Import…** takes a theme from your own
+disk instead, for a theme you are building yourself, one you downloaded from
+somewhere the gallery does not carry, or one you are working on offline.
+
+Choose a folder, or a `.zip`/`.tar`/`.tar.gz` archive. The theme is copied into
+`themes/<name>/` — the same place a catalogue theme lands, so nothing downstream
+behaves differently. It is **copied, not moved**: a theme that is itself a git
+working tree keeps its `.git` and stays usable.
+
+The name comes from the folder or from `theme.toml`, made safe as a folder name
+(`Romana Imperia` → `romana-imperia`). Importing the same theme twice gives
+`romana-imperia` and `romana-imperia-2` rather than overwriting the first.
+
+Three shapes of archive are handled, because repositories publish all of them: a
+`themes/<name>/` root, a nested `themes/<name>.zip`, and a plain zip of the theme
+folder. A zip made on macOS is handled too — its `__MACOSX/` resource-fork mirror
+sorts first alphabetically and would otherwise be installed instead of the theme.
+
+Choosing the wrong folder is the usual mistake, so a folder without `layouts/`
+is refused with a message saying what a theme needs, rather than copied in and
+producing a site that does not build.
