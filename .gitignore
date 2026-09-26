@@ -1,0 +1,15 @@
+# Build products
+.build/
+dist/
+
+# Downloaded/cached Hugo binaries
+.build/hugo-binary/
+
+# macOS
+.DS_Store
+
+# Editors
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+Package.resolved

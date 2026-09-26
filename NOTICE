@@ -1,0 +1,31 @@
+Hugo for Humans
+Copyright (c) 2026 Harsh Gandhi (harshgandhi.com)
+                and Buho Smart Tools (buho.co.in)
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+Bundled third-party software
+
+Hugo — https://gohugo.io
+  Copyright the Hugo Authors. Licensed under the Apache License, Version 2.0.
+  (Not MIT — the licence text fetched from the v0.166.0 tag is Apache-2.0.)
+  Shipped as the `hugo` extended binary so a site can be built without the user
+  installing anything.
+
+  The full upstream licence ships as Contents/Resources/hugo-LICENSE.txt in the
+  app bundle, and the build fails if that file is missing.
+
+macOS is a trademark of Apple Inc.; this project is not affiliated with or
+endorsed by Apple Inc.
